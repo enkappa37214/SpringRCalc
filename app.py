@@ -16,56 +16,50 @@ STONE_TO_KG = 6.35029
 # --- Data Tables ---
 CATEGORY_DATA = {
     "Downcountry": {
-        "travel": 115, "stroke": 45.0, "bias": 60, 
-        "progression": 12, "lr_start": 3.19, "lr_end": 2.81,
+        "travel": 115, "stroke": 45.0, "bias": 60, "base_sag": 28,
+        "progression": 12, "lr_start": 3.19,
         "desc": "110–120mm | Efficient climbing",
         "bike_mass_def_kg": 12.0
     },
     "Trail": {
-        "travel": 130, "stroke": 50.0, "bias": 63, 
-        "progression": 15, "lr_start": 2.92, "lr_end": 2.48,
+        "travel": 130, "stroke": 50.0, "bias": 63, "base_sag": 30,
+        "progression": 15, "lr_start": 2.92,
         "desc": "120–140mm | Versatile all-rounder",
         "bike_mass_def_kg": 13.5
     },
     "All-Mountain": {
-        "travel": 145, "stroke": 55.0, "bias": 65, 
-        "progression": 18, "lr_start": 3.00, "lr_end": 2.46,
+        "travel": 145, "stroke": 55.0, "bias": 65, "base_sag": 31,
+        "progression": 18, "lr_start": 3.00,
         "desc": "140–150mm | Tech backcountry",
         "bike_mass_def_kg": 14.5
     },
     "Enduro": {
-        "travel": 160, "stroke": 60.0, "bias": 68, 
-        "progression": 22, "lr_start": 3.00, "lr_end": 2.34,
+        "travel": 160, "stroke": 60.0, "bias": 68, "base_sag": 33,
+        "progression": 22, "lr_start": 3.00,
         "desc": "150–170mm | Aggressive descending",
         "bike_mass_def_kg": 15.5
     },
     "Long Travel Enduro": {
-        "travel": 175, "stroke": 65.0, "bias": 70, 
-        "progression": 25, "lr_start": 3.00, "lr_end": 2.25,
+        "travel": 175, "stroke": 65.0, "bias": 70, "base_sag": 34,
+        "progression": 25, "lr_start": 3.00,
         "desc": "170–180mm | Near-DH capability",
         "bike_mass_def_kg": 16.5
     },
     "Enduro (Race focus)": {
-        "travel": 165, "stroke": 62.5, "bias": 65, 
-        "progression": 26, "lr_start": 3.13, "lr_end": 2.32,
+        "travel": 165, "stroke": 62.5, "bias": 65, "base_sag": 32,
+        "progression": 26, "lr_start": 3.13,
         "desc": "160–170mm | Speed/tracking focus",
         "bike_mass_def_kg": 15.8
     },
     "Downhill (DH)": {
-        "travel": 200, "stroke": 75.0, "bias": 75, 
-        "progression": 30, "lr_start": 3.14, "lr_end": 2.20,
+        "travel": 200, "stroke": 75.0, "bias": 75, "base_sag": 35,
+        "progression": 30, "lr_start": 3.14,
         "desc": "180–210mm | Gravity focus",
         "bike_mass_def_kg": 17.5
     }
 }
 
-SKILL_MODIFIERS = {
-    "Just starting": {"bias": +4, "sag_mod": 1.5},
-    "Beginner":      {"bias": +2, "sag_mod": 1.0},
-    "Intermediate":  {"bias": 0,  "sag_mod": 0.0},
-    "Advanced":      {"bias": -1, "sag_mod": -0.5},
-    "Racer":         {"bias": -2, "sag_mod": -1.0}
-}
+SKILL_LEVELS = ["Just starting", "Beginner", "Intermediate", "Advanced", "Racer"]
 
 COUPLING_COEFFS = {
     "Downcountry": 0.80, "Trail": 0.75, "All-Mountain": 0.70,
@@ -91,16 +85,21 @@ SPRINDEX_DATA = {
     "DH (75mm)":       {"max_stroke": 75, "ranges": ["290-320", "340-370", "400-440", "450-490", "510-570", "570-630"]}
 }
 
+COMMON_STROKES = [37.5, 40.0, 42.5, 45.0, 47.5, 50.0, 52.5, 55.0, 57.5, 60.0, 62.5, 65.0, 70.0, 72.5, 75.0]
+
 # ==========================================================
 # 2. HELPER FUNCTIONS
 # ==========================================================
-def estimate_unsprung(wheel_tier, frame_mat):
+def estimate_unsprung(wheel_tier, frame_mat, has_inserts):
     base = 1.0 # Drivetrain/Brakes
     wheels = {"Light": 1.7, "Standard": 2.3, "Heavy": 3.0}[wheel_tier]
     swingarm = 0.4 if frame_mat == "Carbon" else 0.7
-    return base + wheels + swingarm
+    inserts = 0.5 if has_inserts else 0.0
+    return base + wheels + swingarm + inserts
 
-def recommend_spring_type(progression_pct):
+def recommend_spring_type(progression_pct, has_hbo):
+    if has_hbo:
+        return "Standard Steel (Linear)", "Shock has HBO (Hydraulic Bottom Out). Linear spring is optimal."
     if progression_pct < 15:
         return "Progressive Coil", f"Frame is linear ({progression_pct:.1f}% progression). Progressive spring recommended to prevent bottom-out."
     else:
@@ -111,15 +110,6 @@ def recommend_spring_type(progression_pct):
 # ==========================================================
 if 'last_category' not in st.session_state:
     st.session_state.last_category = None
-if 'rear_bias_slider' not in st.session_state:
-    st.session_state.rear_bias_slider = 65 
-
-def update_bias_from_category():
-    cat = st.session_state.category_select
-    if cat != st.session_state.last_category:
-        defaults = CATEGORY_DATA[cat]
-        st.session_state.rear_bias_slider = int(defaults["bias"])
-        st.session_state.last_category = cat
 
 def reset_chassis():
     for key in ['bike_weight_man', 'rear_bias_slider']:
@@ -133,11 +123,9 @@ def reset_chassis():
 st.title("Pro MTB Spring Rate Calculator")
 
 # --- MOBILE-FRIENDLY CONFIGURATION ---
-# Replaced Sidebar with Top Expander for visibility
 with st.expander("⚙️ Settings & Units", expanded=True):
     col_u1, col_u2 = st.columns(2)
     with col_u1:
-        # Reordered: Global (kg) is now first (Default)
         unit_mass = st.radio("Mass Units", ["Global (kg)", "North America (lbs)", "UK Hybrid (st & kg)"])
     with col_u2:
         unit_len = st.radio("Length Units", ["Millimetres (mm)", "Inches (\")"])
@@ -149,7 +137,8 @@ st.header("1. Rider Profile")
 col_r1, col_r2 = st.columns(2)
 
 with col_r1:
-    skill = st.selectbox("Rider Skill", list(SKILL_MODIFIERS.keys()), index=2)
+    # Skill currently visual-only for this iteration
+    skill = st.selectbox("Rider Skill", SKILL_LEVELS, index=2)
     
 with col_r2:
     if unit_mass == "UK Hybrid (st & kg)":
@@ -182,8 +171,7 @@ selected_idx = st.selectbox(
     "Category", 
     range(len(cat_options)), 
     format_func=lambda x: cat_labels[x],
-    key='category_select',
-    on_change=update_bias_from_category
+    key='category_select'
 )
 category = cat_options[selected_idx]
 defaults = CATEGORY_DATA[category]
@@ -209,27 +197,39 @@ with col_c1:
     else:
         is_lbs = unit_mass == "North America (lbs)"
         lbl = "Bike Weight (lbs)" if is_lbs else "Bike Weight (kg)"
+        
         def_w_kg = defaults.get("bike_mass_def_kg", 14.5)
         def_w_val = def_w_kg * KG_TO_LB if is_lbs else def_w_kg
+        min_w, max_w = (15.0, 66.0) if is_lbs else (7.0, 30.0)
         
-        w_in = st.number_input(lbl, 5.0, 60.0, float(def_w_val), 0.1, key="bike_weight_man")
+        w_in = st.number_input(lbl, min_w, max_w, float(def_w_val), 0.1, key="bike_weight_man")
         bike_kg = w_in * LB_TO_KG if is_lbs else w_in
 
-# --- Rear Bias ---
+# --- Rear Bias (Modified) ---
 with col_c2:
-    skill_bias_mod = SKILL_MODIFIERS[skill]["bias"]
+    cat_def_bias = int(defaults["bias"])
     
+    cl1, cl2 = st.columns([0.7, 0.3])
+    with cl1:
+        st.markdown("### Rear Bias")
+    with cl2:
+        if st.button("Reset", help=f"Reset to {cat_def_bias}%"):
+            st.session_state.rear_bias_slider = cat_def_bias
+            st.rerun()
+
     if 'rear_bias_slider' not in st.session_state:
-        st.session_state.rear_bias_slider = int(defaults["bias"])
+        st.session_state.rear_bias_slider = cat_def_bias
         
-    if skill in ["Just starting", "Beginner"]:
-        st.caption("🔒 Bias range constrained for safety.")
+    rear_bias_in = st.slider(
+        "Base Bias (%)", 
+        55, 85, 
+        key="rear_bias_slider",
+        label_visibility="collapsed"
+    )
     
-    rear_bias_in = st.slider("Rear Weight Bias (%)", 55, 75, key="rear_bias_slider")
-    
-    final_bias_calc = rear_bias_in + skill_bias_mod
-    st.caption(f"Skill Modifier ({skill}): {skill_bias_mod:+.0f}%")
-    st.caption(f"**Effective Bias:** {final_bias_calc}%")
+    final_bias_calc = rear_bias_in
+    st.caption(f"Category Default: {cat_def_bias}%")
+    st.markdown(f"**Effective Bias:** :blue-background[{final_bias_calc}%]")
 
 # --- Unsprung Mass ---
 with col_c1:
@@ -237,7 +237,8 @@ with col_c1:
     if unsprung_mode:
         u_tier = st.selectbox("Wheelset Tier", ["Light", "Standard", "Heavy"], index=1)
         u_mat = st.selectbox("Rear Triangle", ["Carbon", "Aluminium"], index=1)
-        unsprung_kg = estimate_unsprung(u_tier, u_mat)
+        has_inserts = st.checkbox("Tyre Inserts installed?", value=False)
+        unsprung_kg = estimate_unsprung(u_tier, u_mat, has_inserts)
         st.caption(f"Est: {unsprung_kg:.1f} kg")
     else:
         is_lbs = unit_mass == "North America (lbs)"
@@ -259,32 +260,56 @@ with col_k1:
     t_lbl = "Rear Travel (mm)" if unit_len == "Millimetres (mm)" else "Rear Travel (in)"
     travel_in = st.number_input(t_lbl, 0.0, 300.0, float(def_travel), 1.0)
     
+    # Dropdown for Stroke
     s_lbl = "Shock Stroke (mm)" if unit_len == "Millimetres (mm)" else "Shock Stroke (in)"
-    stroke_in = st.number_input(s_lbl, 0.0, 100.0, float(def_stroke), 0.5)
+    if unit_len == "Millimetres (mm)":
+        try:
+            def_idx = COMMON_STROKES.index(defaults["stroke"])
+        except:
+            def_idx = 7
+        stroke_in = st.selectbox(s_lbl, COMMON_STROKES, index=def_idx)
+    else:
+        stroke_in = st.number_input(s_lbl, 1.5, 4.0, float(def_stroke), 0.1)
 
 travel_mm = travel_in * IN_TO_MM if unit_len != "Millimetres (mm)" else travel_in
 stroke_mm = stroke_in * IN_TO_MM if unit_len != "Millimetres (mm)" else stroke_in
 
 with col_k2:
     adv_kinematics = st.checkbox("Advanced Kinematics")
+    
+    def_lr_start = float(defaults["lr_start"])
+    def_prog = float(defaults["progression"])
+    
     if adv_kinematics:
         st.caption(f"Defaults for {category}")
-        lr_start = st.number_input("LR Start", 1.0, 4.0, defaults["lr_start"], 0.05)
-        lr_end = st.number_input("LR End", 1.0, 4.0, defaults["lr_end"], 0.05)
-        prog_calc = ((lr_start - lr_end) / lr_start) * 100
-        st.caption(f"Calculated Progression: {prog_calc:.1f}%")
+        k_input_mode = st.radio("Input Mode", ["Start & Progression %", "Start & End Rates"], horizontal=True)
+        lr_start = st.number_input("LR Start Rate", 1.5, 4.0, def_lr_start, 0.05)
+        
+        if k_input_mode == "Start & Progression %":
+            prog_pct = st.number_input("Progression (%)", 0.0, 60.0, def_prog, 1.0)
+            lr_end = lr_start * (1 - (prog_pct/100))
+            st.caption(f"Derived End Rate: {lr_end:.2f}")
+        else:
+            def_end = lr_start * (1 - (def_prog/100))
+            lr_end = st.number_input("LR End Rate", 1.5, 4.0, def_end, 0.05)
+            prog_pct = ((lr_start - lr_end) / lr_start) * 100
+            st.caption(f"Calculated Progression: {prog_pct:.1f}%")
+
         mean_lr = (lr_start + lr_end) / 2
+        
     else:
-        prog_calc = float(defaults["progression"]) 
+        prog_pct = def_prog
         mean_lr = travel_mm / stroke_mm
         st.metric("Mean Leverage Ratio", f"{mean_lr:.2f}")
+    
+    has_hbo = st.checkbox("Shock has HBO (Hydraulic Bottom Out)?")
 
 spring_type_options = ["Auto-Recommend", "Standard Steel (Linear)", "Lightweight Steel/Ti", "Sprindex", "Progressive Coil"]
 spring_type_sel = st.selectbox("Spring Type", spring_type_options, index=0)
 
 active_spring_type = spring_type_sel
 if spring_type_sel == "Auto-Recommend":
-    rec_type, rec_reason = recommend_spring_type(prog_calc)
+    rec_type, rec_reason = recommend_spring_type(prog_pct, has_hbo)
     active_spring_type = rec_type
     st.success(f"💡 Recommended: **{rec_type}**")
     st.caption(rec_reason)
@@ -294,19 +319,15 @@ if spring_type_sel == "Auto-Recommend":
 # ==========================================================
 st.header("4. Setup Preferences")
 
-cat_sag_map = {"Downcountry": 28, "Trail": 30, "All-Mountain": 31, "Enduro": 33, 
-               "Long Travel Enduro": 34, "Enduro (Race focus)": 32, "Downhill (DH)": 35}
-base_sag = cat_sag_map[category]
-skill_mod = SKILL_MODIFIERS[skill]["sag_mod"]
-smart_default_sag = base_sag + skill_mod
+# Default Sag is now purely Category-based (no skill modifier)
+smart_default_sag = defaults["base_sag"]
 
 target_sag = st.slider(
     "Target Sag (%)", 
-    min_value=20.0, 
-    max_value=40.0, 
+    min_value=20.0, max_value=40.0, 
     value=float(smart_default_sag), 
     step=0.5,
-    help="Default calculated from Bike Category + Rider Skill. Adjust preference here."
+    help="Default based on Bike Category. Adjust preference here."
 )
 
 # ---------------- PHYSICS ENGINE ----------------
@@ -354,8 +375,8 @@ for rate in rates_to_check:
 
     options.append({
         "Spring Rate": f"{rate} lbs",
-        "Resulting Sag": f"{resulting_sag_pct:.1f}%",
-        "Travel Usage": f"{resulting_sag_mm:.1f} mm",
+        "Resulting Sag (%)": f"{resulting_sag_pct:.1f}%",
+        "Travel Usage (mm)": f"{resulting_sag_mm:.1f} mm",
         "Fit": tag
     })
 
