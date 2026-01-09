@@ -4,7 +4,7 @@ import pandas as pd
 # ==========================================================
 # 1. CONFIGURATION & DATA CONSTANTS
 # ==========================================================
-st.set_page_config(page_title="Pro MTB Spring Rate Calculator", page_icon="⚙️", layout="centered")
+st.set_page_config(page_title="MTB Spring Rate Calculator", page_icon="⚙️", layout="centered")
 
 # --- Constants ---
 LB_TO_KG = 0.453592
