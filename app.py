@@ -59,6 +59,17 @@ CATEGORY_DATA = {
     }
 }
 
+# Define options list globally so it is accessible to callbacks
+CAT_OPTIONS = list(CATEGORY_DATA.keys())
+
+SKILL_MODIFIERS = {
+    "Just starting": {"bias": +4, "sag_mod": 1.5},
+    "Beginner":      {"bias": +2, "sag_mod": 1.0},
+    "Intermediate":  {"bias": 0,  "sag_mod": 0.0},
+    "Advanced":      {"bias": -1, "sag_mod": -0.5},
+    "Racer":         {"bias": -2, "sag_mod": -1.0}
+}
+
 COUPLING_COEFFS = {
     "Downcountry": 0.80, "Trail": 0.75, "All-Mountain": 0.70,
     "Enduro": 0.72, "Long Travel Enduro": 0.90, 
@@ -106,13 +117,16 @@ if 'last_category' not in st.session_state:
 if 'rear_bias_slider' not in st.session_state:
     st.session_state.rear_bias_slider = 65 
 
+# Callback: Update Bias when Category changes
 def update_bias_from_category():
+    # .category_select now returns the String Key (e.g., "Downcountry")
     cat = st.session_state.category_select
     if cat != st.session_state.last_category:
         defaults = CATEGORY_DATA[cat]
         st.session_state.rear_bias_slider = int(defaults["bias"])
         st.session_state.last_category = cat
 
+# Callback: Reset Button
 def reset_chassis():
     for key in ['bike_weight_man', 'rear_bias_slider']:
         if key in st.session_state:
@@ -120,23 +134,17 @@ def reset_chassis():
     st.session_state.last_category = None 
 
 # ==========================================================
-# 4. MAIN UI START
+# 4. CONFIG SIDEBAR
 # ==========================================================
-st.title("Pro MTB Spring Rate Calculator")
-
-# --- MOBILE-FRIENDLY CONFIGURATION ---
-# Replaced Sidebar with Top Expander for visibility
-with st.expander("⚙️ Settings & Units", expanded=True):
-    col_u1, col_u2 = st.columns(2)
-    with col_u1:
-        # Reordered: Global (kg) is now first (Default)
-        unit_mass = st.radio("Mass Units", ["Global (kg)", "North America (lbs)", "UK Hybrid (st & kg)"])
-    with col_u2:
-        unit_len = st.radio("Length Units", ["Millimetres (mm)", "Inches (\")"])
+st.sidebar.header("⚙️ Configuration")
+unit_mass = st.sidebar.radio("Rider/Bike Units", ["North America (lbs)", "Global (kg)", "UK Hybrid (st & kg)"])
+unit_len = st.sidebar.radio("Suspension Units", ["Millimetres (mm)", "Inches (\")"])
 
 # ==========================================================
 # 5. UI - RIDER
 # ==========================================================
+st.title("Pro MTB Spring Rate Calculator")
+
 st.header("1. Rider Profile")
 col_r1, col_r2 = st.columns(2)
 
@@ -167,17 +175,14 @@ with col_r2:
 # ==========================================================
 st.header("2. Chassis Data")
 
-cat_options = list(CATEGORY_DATA.keys())
-cat_labels = [f"{k} ({CATEGORY_DATA[k]['desc']})" for k in cat_options]
-
-selected_idx = st.selectbox(
+# FIX: Passed CAT_OPTIONS directly and formatted the string for display.
+category = st.selectbox(
     "Category", 
-    range(len(cat_options)), 
-    format_func=lambda x: cat_labels[x],
+    options=CAT_OPTIONS, 
+    format_func=lambda x: f"{x} ({CATEGORY_DATA[x]['desc']})",
     key='category_select',
     on_change=update_bias_from_category
 )
-category = cat_options[selected_idx]
 defaults = CATEGORY_DATA[category]
 
 st.button("Reset Chassis to Category Defaults", on_click=reset_chassis)
@@ -192,6 +197,7 @@ with col_c1:
         level = st.selectbox("Build Level", ["Entry-Level", "Mid-Level", "High-End"])
         size = st.selectbox("Size", list(SIZE_WEIGHT_MODS.keys()), index=2)
         
+        # Estimation Logic
         level_idx = {"Entry-Level": 0, "Mid-Level": 1, "High-End": 2}[level]
         base_w = BIKE_WEIGHT_EST[category][mat][level_idx]
         est_w = base_w + SIZE_WEIGHT_MODS[size]
@@ -211,13 +217,19 @@ with col_c1:
 with col_c2:
     skill_bias_mod = SKILL_MODIFIERS[skill]["bias"]
     
+    # Initialize slider state if missing (safety check)
     if 'rear_bias_slider' not in st.session_state:
         st.session_state.rear_bias_slider = int(defaults["bias"])
         
     if skill in ["Just starting", "Beginner"]:
         st.caption("🔒 Bias range constrained for safety.")
     
-    rear_bias_in = st.slider("Rear Weight Bias (%)", 55, 75, key="rear_bias_slider")
+    # The Slider
+    rear_bias_in = st.slider(
+        "Rear Weight Bias (%)", 
+        55, 75, 
+        key="rear_bias_slider" 
+    )
     
     final_bias_calc = rear_bias_in + skill_bias_mod
     st.caption(f"Skill Modifier ({skill}): {skill_bias_mod:+.0f}%")
@@ -244,6 +256,7 @@ with col_c1:
 st.header("3. Shock & Kinematics")
 col_k1, col_k2 = st.columns(2)
 
+# Handling Defaults logic
 def_travel = defaults["travel"] if unit_len == "Millimetres (mm)" else defaults["travel"] * MM_TO_IN
 def_stroke = defaults["stroke"] if unit_len == "Millimetres (mm)" else defaults["stroke"] * MM_TO_IN
 
@@ -263,6 +276,8 @@ with col_k2:
         st.caption(f"Defaults for {category}")
         lr_start = st.number_input("LR Start", 1.0, 4.0, defaults["lr_start"], 0.05)
         lr_end = st.number_input("LR End", 1.0, 4.0, defaults["lr_end"], 0.05)
+        
+        # Calculate progression for logic use
         prog_calc = ((lr_start - lr_end) / lr_start) * 100
         st.caption(f"Calculated Progression: {prog_calc:.1f}%")
         mean_lr = (lr_start + lr_end) / 2
@@ -271,6 +286,7 @@ with col_k2:
         mean_lr = travel_mm / stroke_mm
         st.metric("Mean Leverage Ratio", f"{mean_lr:.2f}")
 
+# Spring Type Selection with Auto-Recommend
 spring_type_options = ["Auto-Recommend", "Standard Steel (Linear)", "Lightweight Steel/Ti", "Sprindex", "Progressive Coil"]
 spring_type_sel = st.selectbox("Spring Type", spring_type_options, index=0)
 
@@ -286,12 +302,14 @@ if spring_type_sel == "Auto-Recommend":
 # ==========================================================
 st.header("4. Setup Preferences")
 
+# 1. Calculate Smart Default based on inputs
 cat_sag_map = {"Downcountry": 28, "Trail": 30, "All-Mountain": 31, "Enduro": 33, 
                "Long Travel Enduro": 34, "Enduro (Race focus)": 32, "Downhill (DH)": 35}
 base_sag = cat_sag_map[category]
 skill_mod = SKILL_MODIFIERS[skill]["sag_mod"]
 smart_default_sag = base_sag + skill_mod
 
+# 2. User Input (Initialized with Smart Default)
 target_sag = st.slider(
     "Target Sag (%)", 
     min_value=20.0, 
@@ -302,15 +320,18 @@ target_sag = st.slider(
 )
 
 # ---------------- PHYSICS ENGINE ----------------
+# Mass
 coupling = COUPLING_COEFFS[category]
 eff_rider_kg = rider_kg + (gear_kg * coupling)
 system_kg = eff_rider_kg + bike_kg
 rear_load_kg = (system_kg * (final_bias_calc / 100)) - unsprung_kg
 rear_load_lbs = rear_load_kg * KG_TO_LB
 
+# Spring Rate Formula
 sag_mm = stroke_mm * (target_sag / 100)
 raw_rate = (rear_load_lbs * mean_lr) / (sag_mm * MM_TO_IN)
 
+# Progression Correction
 if active_spring_type == "Progressive Coil":
     raw_rate = raw_rate * 0.97
 
@@ -324,9 +345,11 @@ res_c1, res_c2 = st.columns(2)
 res_c1.metric("Ideal Spring Rate", f"{int(raw_rate)} lbs/in", help="Exact calculated rate for target sag")
 res_c2.metric("Target Sag", f"{target_sag:.1f}%", f"{sag_mm:.1f} mm")
 
+# --- Spring Options Matrix ---
 st.subheader("Available Spring Options")
 st.caption("Select the spring that best fits your preference range.")
 
+# Generate neighbor rates (Recommended +/- 25lbs)
 options = []
 base_step = 25
 center_rate = int(round(raw_rate / base_step) * base_step)
@@ -335,6 +358,7 @@ rates_to_check = [center_rate - base_step, center_rate, center_rate + base_step]
 for rate in rates_to_check:
     if rate <= 0: continue
     
+    # Inverse Physics: Calculate Sag resulting from this specific Spring Rate
     resulting_sag_mm = (rear_load_lbs * mean_lr) / (rate * MM_TO_IN) 
     resulting_sag_pct = (resulting_sag_mm / stroke_mm) * 100
     
@@ -358,6 +382,7 @@ st.dataframe(
     use_container_width=True
 )
 
+# --- Preload Table ---
 st.subheader("Fine Tuning (Preload)")
 st.caption(f"Effect of preload on the **{center_rate} lbs** spring:")
 
@@ -365,6 +390,7 @@ preload_data = []
 for turns in [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]:
     preload_mm = turns * 1.0 
     preload_in = preload_mm * MM_TO_IN
+    # Calculate effective load support with preload
     sag_in_eff = (rear_load_lbs * mean_lr / center_rate) - preload_in
     sag_pct_eff = (sag_in_eff / (stroke_mm * MM_TO_IN)) * 100
     
@@ -381,6 +407,7 @@ for turns in [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]:
 
 st.dataframe(pd.DataFrame(preload_data), hide_index=True)
 
+# --- Sprindex Logic ---
 if active_spring_type == "Sprindex":
     st.subheader("Sprindex Recommendation")
     family = None
