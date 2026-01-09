@@ -17,37 +17,43 @@ STONE_TO_KG = 6.35029
 PROGRESSIVE_CORRECTION_FACTOR = 0.97  # Reduces rate by 3% for progressive coils
 
 # --- Data Tables ---
-# UPDATES: 
-# 1. "Enduro" default stroke changed to 62.5mm
-# 2. "Enduro" default bike mass changed to 15.11kg
+# NOTE: 'bias' here represents DYNAMIC ATTACK POSITION, not static seated weight.
+# Gravity bikes have higher dynamic rear load despite having steeper seat tubes.
 CATEGORY_DATA = {
     "Downcountry": {
-        "travel": 115, "stroke": 45.0, "bias": 60, "base_sag": 28,
-        "progression": 12, "lr_start": 2.75, "desc": "110–120 mm", "bike_mass_def_kg": 12.0
+        "travel": 115, "stroke": 45.0, "base_sag": 28,
+        "progression": 12, "lr_start": 2.75, "desc": "110–120 mm", "bike_mass_def_kg": 12.0,
+        "bias": 60 # XC stays relatively neutral
     },
     "Trail": {
-        "travel": 130, "stroke": 50.0, "bias": 63, "base_sag": 30,
-        "progression": 15, "lr_start": 2.80, "desc": "120–140 mm", "bike_mass_def_kg": 13.5
+        "travel": 130, "stroke": 50.0, "base_sag": 30,
+        "progression": 15, "lr_start": 2.80, "desc": "120–140 mm", "bike_mass_def_kg": 13.5,
+        "bias": 63 
     },
     "All-Mountain": {
-        "travel": 145, "stroke": 55.0, "bias": 65, "base_sag": 31,
-        "progression": 18, "lr_start": 2.90, "desc": "140–150 mm", "bike_mass_def_kg": 14.5
+        "travel": 145, "stroke": 55.0, "base_sag": 31,
+        "progression": 18, "lr_start": 2.90, "desc": "140–150 mm", "bike_mass_def_kg": 14.5,
+        "bias": 65
     },
     "Enduro": {
-        "travel": 160, "stroke": 62.5, "bias": 68, "base_sag": 33, 
-        "progression": 22, "lr_start": 3.00, "desc": "150–170 mm", "bike_mass_def_kg": 15.11
+        "travel": 160, "stroke": 62.5, "base_sag": 33, 
+        "progression": 22, "lr_start": 3.00, "desc": "150–170 mm", "bike_mass_def_kg": 15.11,
+        "bias": 67 # Adjusted to 67% (High dynamic load)
     },
     "Long Travel Enduro": {
-        "travel": 175, "stroke": 65.0, "bias": 70, "base_sag": 34,
-        "progression": 25, "lr_start": 3.05, "desc": "170–180 mm", "bike_mass_def_kg": 16.5
+        "travel": 175, "stroke": 65.0, "base_sag": 34,
+        "progression": 25, "lr_start": 3.05, "desc": "170–180 mm", "bike_mass_def_kg": 16.5,
+        "bias": 69
     },
     "Enduro (Race focus)": {
-        "travel": 165, "stroke": 62.5, "bias": 65, "base_sag": 32,
-        "progression": 26, "lr_start": 3.13, "desc": "160–170 mm", "bike_mass_def_kg": 15.8
+        "travel": 165, "stroke": 62.5, "base_sag": 32,
+        "progression": 26, "lr_start": 3.13, "desc": "160–170 mm", "bike_mass_def_kg": 15.8,
+        "bias": 68
     },
     "Downhill (DH)": {
-        "travel": 200, "stroke": 75.0, "bias": 75, "base_sag": 35,
-        "progression": 30, "lr_start": 3.14, "desc": "180–210 mm", "bike_mass_def_kg": 17.5
+        "travel": 200, "stroke": 75.0, "base_sag": 35,
+        "progression": 30, "lr_start": 3.14, "desc": "180–210 mm", "bike_mass_def_kg": 17.5,
+        "bias": 72 # Adjusted to 72% (Dynamic descending load)
     }
 }
 
@@ -60,11 +66,14 @@ SKILL_MODIFIERS = {
 }
 SKILL_LEVELS = list(SKILL_MODIFIERS.keys())
 
+# Coupling approximates how 'heavy' the rider's gear feels in the system dynamics
 COUPLING_COEFFS = {
     "Downcountry": 0.80, "Trail": 0.75, "All-Mountain": 0.70,
     "Enduro": 0.72, "Long Travel Enduro": 0.90, 
     "Enduro (Race focus)": 0.78, "Downhill (DH)": 0.95
 }
+
+SIZE_WEIGHT_MODS = {"XS": -0.5, "S": -0.25, "M": 0.0, "L": 0.3, "XL": 0.6, "XXL": 0.95}
 
 BIKE_WEIGHT_EST = {
     "Downcountry": {"Carbon": [12.2, 11.4, 10.4], "Aluminium": [13.8, 13.1, 12.5]},
@@ -75,8 +84,6 @@ BIKE_WEIGHT_EST = {
     "Enduro (Race focus)": {"Carbon": [16.0, 15.2, 14.5], "Aluminium": [17.2, 16.3, 15.5]},
     "Downhill (DH)": {"Carbon": [17.8, 17.0, 16.2], "Aluminium": [19.5, 18.5, 17.5]}
 }
-
-SIZE_WEIGHT_MODS = {"XS": -0.5, "S": -0.25, "M": 0.0, "L": 0.3, "XL": 0.6, "XXL": 0.95}
 
 SPRINDEX_DATA = {
     "XC/Trail (55mm)": {"max_stroke": 55, "ranges": ["380-430", "430-500", "490-560", "550-610", "610-690", "650-760"]},
@@ -182,7 +189,7 @@ st.header("2. Chassis Data")
 cat_options = list(CATEGORY_DATA.keys())
 cat_labels = [f"{k} ({CATEGORY_DATA[k]['desc']})" for k in cat_options]
 
-# DEFAULT: Enduro (Index 3 based on dict keys: Downcountry, Trail, All-Mountain, Enduro)
+# DEFAULT: Enduro (Index 3)
 selected_idx = st.selectbox(
     "Category", 
     range(len(cat_options)), 
@@ -199,7 +206,6 @@ col_c1, col_c2 = st.columns(2)
 
 # --- Bike Weight ---
 with col_c1:
-    # DEFAULT: Bike Weight Mode = Manual (index 0)
     weight_mode = st.radio("Bike Weight Mode", ["Manual Input", "Estimate"], index=0, horizontal=True)
     if weight_mode == "Estimate":
         mat = st.selectbox("Frame Material", ["Carbon", "Aluminium"])
@@ -216,7 +222,6 @@ with col_c1:
         is_lbs = unit_mass == "North America (lbs)"
         lbl = "Bike Weight (lbs)" if is_lbs else "Bike Weight (kg)"
         
-        # Uses CATEGORY_DATA defaults (Updated Enduro to 15.11)
         def_w_kg = defaults.get("bike_mass_def_kg", 14.5)
         def_w_val = def_w_kg * KG_TO_LB if is_lbs else def_w_kg
         min_w, max_w = (15.0, 66.0) if is_lbs else (7.0, 30.0)
@@ -248,18 +253,16 @@ with col_c2:
     )
     
     final_bias_calc = rear_bias_in
-    st.caption(f"Category Default: **{cat_def_bias}%**")
+    st.caption(f"Category Default: **{cat_def_bias}%** (Dynamic/Attack)")
     if skill_suggestion != 0:
         advice_sign = "+" if skill_suggestion > 0 else ""
         st.info(f"💡 Because you selected **{skill}**, consider applying **{advice_sign}{skill_suggestion}%** bias.")
     else:
         st.caption(f"For **{skill}**, the default bias is typically appropriate.")
-    
     st.markdown(f"**Selected Bias:** :blue-background[{final_bias_calc}%]")
 
 # --- Unsprung Mass ---
 with col_c1:
-    # DEFAULT: Toggle OFF (Manual Input)
     unsprung_mode = st.toggle("Estimate Unsprung Mass", value=False)
     if unsprung_mode:
         u_tier = st.selectbox("Wheelset Tier", ["Light", "Standard", "Heavy"], index=1)
