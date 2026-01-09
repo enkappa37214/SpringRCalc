@@ -17,6 +17,9 @@ STONE_TO_KG = 6.35029
 PROGRESSIVE_CORRECTION_FACTOR = 0.97  # Reduces rate by 3% for progressive coils
 
 # --- Data Tables ---
+# UPDATES: 
+# 1. "Enduro" default stroke changed to 62.5mm
+# 2. "Enduro" default bike mass changed to 15.11kg
 CATEGORY_DATA = {
     "Downcountry": {
         "travel": 115, "stroke": 45.0, "bias": 60, "base_sag": 28,
@@ -31,8 +34,8 @@ CATEGORY_DATA = {
         "progression": 18, "lr_start": 2.90, "desc": "140–150 mm", "bike_mass_def_kg": 14.5
     },
     "Enduro": {
-        "travel": 160, "stroke": 60.0, "bias": 68, "base_sag": 33,
-        "progression": 22, "lr_start": 3.00, "desc": "150–170 mm", "bike_mass_def_kg": 15.5
+        "travel": 160, "stroke": 62.5, "bias": 68, "base_sag": 33, 
+        "progression": 22, "lr_start": 3.00, "desc": "150–170 mm", "bike_mass_def_kg": 15.11
     },
     "Long Travel Enduro": {
         "travel": 175, "stroke": 65.0, "bias": 70, "base_sag": 34,
@@ -161,11 +164,13 @@ with col_r2:
         rider_in = st.number_input("Rider Weight (lbs)", 90.0, 280.0, 160.0, 1.0)
         rider_kg = rider_in * LB_TO_KG
     else:
-        rider_in = st.number_input("Rider Weight (kg)", 40.0, 130.0, 75.0, 0.5)
+        # DEFAULT: Rider 68kg
+        rider_in = st.number_input("Rider Weight (kg)", 40.0, 130.0, 68.0, 0.5)
         rider_kg = rider_in
 
     gear_label = "Gear Weight (lbs)" if unit_mass == "North America (lbs)" else "Gear Weight (kg)"
-    gear_def = 5.0 if unit_mass == "North America (lbs)" else 2.5
+    # DEFAULT: Gear 4kg
+    gear_def = 5.0 if unit_mass == "North America (lbs)" else 4.0
     gear_in = st.number_input(gear_label, 0.0, 25.0, gear_def, 0.5)
     gear_kg = gear_in * LB_TO_KG if "lbs" in unit_mass else gear_in
 
@@ -177,11 +182,13 @@ st.header("2. Chassis Data")
 cat_options = list(CATEGORY_DATA.keys())
 cat_labels = [f"{k} ({CATEGORY_DATA[k]['desc']})" for k in cat_options]
 
+# DEFAULT: Enduro (Index 3 based on dict keys: Downcountry, Trail, All-Mountain, Enduro)
 selected_idx = st.selectbox(
     "Category", 
     range(len(cat_options)), 
     format_func=lambda x: cat_labels[x],
-    key='category_select'
+    key='category_select',
+    index=3 
 )
 category = cat_options[selected_idx]
 defaults = CATEGORY_DATA[category]
@@ -192,7 +199,8 @@ col_c1, col_c2 = st.columns(2)
 
 # --- Bike Weight ---
 with col_c1:
-    weight_mode = st.radio("Bike Weight Mode", ["Manual Input", "Estimate"], horizontal=True)
+    # DEFAULT: Bike Weight Mode = Manual (index 0)
+    weight_mode = st.radio("Bike Weight Mode", ["Manual Input", "Estimate"], index=0, horizontal=True)
     if weight_mode == "Estimate":
         mat = st.selectbox("Frame Material", ["Carbon", "Aluminium"])
         level = st.selectbox("Build Level", ["Entry-Level", "Mid-Level", "High-End"])
@@ -208,6 +216,7 @@ with col_c1:
         is_lbs = unit_mass == "North America (lbs)"
         lbl = "Bike Weight (lbs)" if is_lbs else "Bike Weight (kg)"
         
+        # Uses CATEGORY_DATA defaults (Updated Enduro to 15.11)
         def_w_kg = defaults.get("bike_mass_def_kg", 14.5)
         def_w_val = def_w_kg * KG_TO_LB if is_lbs else def_w_kg
         min_w, max_w = (15.0, 66.0) if is_lbs else (7.0, 30.0)
@@ -246,12 +255,12 @@ with col_c2:
     else:
         st.caption(f"For **{skill}**, the default bias is typically appropriate.")
     
-    # FIXED: UI label changed from "Effective Bias" to "Selected Bias"
     st.markdown(f"**Selected Bias:** :blue-background[{final_bias_calc}%]")
 
 # --- Unsprung Mass ---
 with col_c1:
-    unsprung_mode = st.toggle("Estimate Unsprung Mass", value=True)
+    # DEFAULT: Toggle OFF (Manual Input)
+    unsprung_mode = st.toggle("Estimate Unsprung Mass", value=False)
     if unsprung_mode:
         u_tier = st.selectbox("Wheelset Tier", ["Light", "Standard", "Heavy"], index=1)
         u_mat = st.selectbox("Rear Triangle", ["Carbon", "Aluminium"], index=1)
@@ -261,8 +270,9 @@ with col_c1:
     else:
         is_lbs = unit_mass == "North America (lbs)"
         lbl_u = "Unsprung (lbs)" if is_lbs else "Unsprung (kg)"
-        u_def = 9.0 if is_lbs else 4.0
-        u_in = st.number_input(lbl_u, 0.0, 20.0, u_def, 0.1)
+        # DEFAULT: 4.27 kg
+        u_def = 9.4 if is_lbs else 4.27
+        u_in = st.number_input(lbl_u, 0.0, 20.0, u_def, 0.01)
         unsprung_kg = u_in * LB_TO_KG if is_lbs else u_in
 
 # ==========================================================
@@ -369,7 +379,6 @@ rear_load_lbs = rear_load_kg * KG_TO_LB
 sag_mm = stroke_mm * (target_sag / 100)
 raw_rate = (rear_load_lbs * effective_lr) / (sag_mm * MM_TO_IN)
 
-# FIXED: Replaced magic number 0.97 with constant
 if active_spring_type == "Progressive Coil":
     raw_rate = raw_rate * PROGRESSIVE_CORRECTION_FACTOR
 
