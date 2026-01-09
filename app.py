@@ -323,7 +323,8 @@ with col_k2:
     has_hbo = st.checkbox("Shock has HBO (Hydraulic Bottom Out)?")
 
 # Springs You Can Use Display
-analysis = analyze_spring_compatibility(progression_pct, has_hbo)
+# FIXED: Passed 'prog_pct' (the local variable) instead of 'progression_pct'
+analysis = analyze_spring_compatibility(prog_pct, has_hbo)
 st.subheader("Springs You Can Use")
 for spring_type, info in analysis.items():
     if "Avoid" in info["status"] or "Caution" in info["status"]:
@@ -381,7 +382,6 @@ res_c2.metric("Target Sag", f"{target_sag:.1f}% ({sag_mm:.1f} mm)")
 if active_spring_type == "Sprindex":
     st.subheader("Sprindex Recommendation")
     
-    # 1. Identify Family
     family = None
     if stroke_mm <= 55: family = "XC/Trail (55mm)"
     elif stroke_mm <= 65: family = "Enduro (65mm)"
@@ -390,7 +390,6 @@ if active_spring_type == "Sprindex":
     if family:
         st.markdown(f"**Compatible Family:** {family}")
         
-        # 2. Check Overlap vs Gap
         ranges = SPRINDEX_DATA[family]["ranges"]
         found_match = False
         gap_neighbors = []
@@ -403,19 +402,15 @@ if active_spring_type == "Sprindex":
                 found_match = True
                 break
             
-            # Check if we are in a gap BEFORE this range
-            # (i.e., raw_rate is > prev_high AND < current_low)
             if i > 0:
                 prev_low, prev_high = map(int, ranges[i-1].split("-"))
                 if prev_high < raw_rate < low:
                     gap_neighbors = [(ranges[i-1], prev_high), (r_str, low)]
         
-        # 3. Gap Handling
         if not found_match and gap_neighbors:
             lower_range, lower_limit = gap_neighbors[0]
             upper_range, upper_limit = gap_neighbors[1]
             
-            # Calculate sag for the limits
             sag_lower = (rear_load_lbs * effective_lr) / (lower_limit * MM_TO_IN) / stroke_mm * 100
             sag_upper = (rear_load_lbs * effective_lr) / (upper_limit * MM_TO_IN) / stroke_mm * 100
             
@@ -442,7 +437,6 @@ if active_spring_type == "Sprindex":
         st.error(f"Shock stroke ({stroke_mm}mm) exceeds Sprindex maximums.")
 
 else:
-    # --- STANDARD DISPLAY ---
     st.subheader("Available Spring Options")
     st.caption("Select the spring that best fits your preference range.")
 
@@ -507,3 +501,4 @@ st.info("""
 * **Stroke Compatibility:** Ensure spring stroke > shock stroke to avoid coil bind.
 * **Diameter:** Check spring ID compatibility with your specific shock body.
 """)
+l
