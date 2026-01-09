@@ -59,14 +59,6 @@ CATEGORY_DATA = {
     }
 }
 
-SKILL_MODIFIERS = {
-    "Just starting": {"bias": +4, "sag_mod": 1.5},
-    "Beginner":      {"bias": +2, "sag_mod": 1.0},
-    "Intermediate":  {"bias": 0,  "sag_mod": 0.0},
-    "Advanced":      {"bias": -1, "sag_mod": -0.5},
-    "Racer":         {"bias": -2, "sag_mod": -1.0}
-}
-
 COUPLING_COEFFS = {
     "Downcountry": 0.80, "Trail": 0.75, "All-Mountain": 0.70,
     "Enduro": 0.72, "Long Travel Enduro": 0.90, 
