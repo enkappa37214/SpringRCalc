@@ -14,7 +14,6 @@ MM_TO_IN = 1/25.4
 STONE_TO_KG = 6.35029
 
 # --- Data Tables ---
-# Updated Rear Bias defaults per your request
 CATEGORY_DATA = {
     "Downcountry": {
         "travel": 115, "stroke": 45.0, "bias": 60, 
@@ -108,28 +107,31 @@ def recommend_spring_type(progression_pct):
         return "Standard Steel (Linear)", f"Frame is progressive ({progression_pct:.1f}%). Linear spring will work well."
 
 # ==========================================================
-# 3. SESSION STATE & UPDATES
+# 3. SESSION STATE & CALLBACKS
 # ==========================================================
+# Initialize state variables if they don't exist
 if 'last_category' not in st.session_state:
     st.session_state.last_category = None
+if 'rear_bias_slider' not in st.session_state:
+    st.session_state.rear_bias_slider = 65 # Safe default
 
-# Callback to update Bias when Category changes
+# Callback: Update Bias when Category changes
 def update_bias_from_category():
     cat = st.session_state.category_select
-    # Only update if category actually changed to avoid overwriting manual adjustments indiscriminately
+    # Only update if category actually changed
     if cat != st.session_state.last_category:
         defaults = CATEGORY_DATA[cat]
-        # We set the session state for the slider
         st.session_state.rear_bias_slider = int(defaults["bias"])
         st.session_state.last_category = cat
 
-# Callback for Reset Button
+# Callback: Reset Button
 def reset_chassis():
-    # Delete specific keys to force reload from defaults
+    # Deleting these keys forces Streamlit widgets to reload with their default parameters
     for key in ['bike_weight_man', 'rear_bias_slider']:
         if key in st.session_state:
             del st.session_state[key]
-    st.session_state.last_category = None # Reset category tracker
+    # Re-trigger bias update logic for current category selection
+    st.session_state.last_category = None 
 
 # ==========================================================
 # 4. CONFIG SIDEBAR
@@ -173,10 +175,10 @@ with col_r2:
 # ==========================================================
 st.header("2. Chassis Data")
 
-# Category Selection with Auto-Update Logic
+# Category Selection
 cat_options = list(CATEGORY_DATA.keys())
 cat_labels = [f"{k} ({CATEGORY_DATA[k]['desc']})" for k in cat_options]
-# We use key='category_select' and on_change to trigger the bias update
+
 selected_idx = st.selectbox(
     "Category", 
     range(len(cat_options)), 
@@ -186,10 +188,6 @@ selected_idx = st.selectbox(
 )
 category = cat_options[selected_idx]
 defaults = CATEGORY_DATA[category]
-
-# Ensure session state for bias is initialized if it doesn't exist (first load)
-if 'rear_bias_slider' not in st.session_state:
-    st.session_state.rear_bias_slider = int(defaults["bias"])
 
 st.button("Reset Chassis to Category Defaults", on_click=reset_chassis)
 
@@ -221,34 +219,25 @@ with col_c1:
 
 # --- Rear Bias ---
 with col_c2:
-    # Skill Modifier affects the *Manual* slider value logically, 
-    # but strictly we just want to ensure the slider range is valid.
     skill_bias_mod = SKILL_MODIFIERS[skill]["bias"]
     
-    # We grab the value from session state (which was updated by the callback)
-    current_bias_val = st.session_state.rear_bias_slider
-    
-    # Validation constraint
+    # Initialize slider state if missing (safety check)
+    if 'rear_bias_slider' not in st.session_state:
+        st.session_state.rear_bias_slider = int(defaults["bias"])
+        
     if skill in ["Just starting", "Beginner"]:
-        st.caption("🔒 Bias slider is constrained for safety.")
+        st.caption("🔒 Bias range constrained for safety.")
     
-    # Note: We apply the skill modifier to the *displayed/calculated* bias? 
-    # Or does the user select the bias directly?
-    # Prompt implies: "Default depending on Category... after that user can adjust"
-    # Prompt also says: "Apply skill modifier to Base Category Bias"
-    # To keep it simple: The Slider starts at Category Default. We apply Skill Mod to the *result* in physics.
-    # OR we shift the slider. Let's shift the slider default (done in callback) + user adjustment.
-    
+    # The Slider
     rear_bias_in = st.slider(
         "Rear Weight Bias (%)", 
         55, 75, 
-        key="rear_bias_slider" # This key binds the slider to the session state variable
+        key="rear_bias_slider" 
     )
     
-    # Apply Skill Modifier Visualization
     final_bias_calc = rear_bias_in + skill_bias_mod
-    st.caption(f"Skill Modifier ({skill}): {skill_bias_mod}%")
-    st.caption(f"**Effective Bias used in Calc:** {final_bias_calc}%")
+    st.caption(f"Skill Modifier ({skill}): {skill_bias_mod:+.0f}%")
+    st.caption(f"**Effective Bias:** {final_bias_calc}%")
 
 # --- Unsprung Mass ---
 with col_c1:
@@ -291,13 +280,13 @@ with col_k2:
         st.caption(f"Defaults for {category}")
         lr_start = st.number_input("LR Start", 1.0, 4.0, defaults["lr_start"], 0.05)
         lr_end = st.number_input("LR End", 1.0, 4.0, defaults["lr_end"], 0.05)
+        
         # Calculate progression for logic use
-        # Prog = (Start - End) / Start
         prog_calc = ((lr_start - lr_end) / lr_start) * 100
         st.caption(f"Calculated Progression: {prog_calc:.1f}%")
         mean_lr = (lr_start + lr_end) / 2
     else:
-        prog_calc = float(defaults["progression"]) # Fallback to default for recommendation logic
+        prog_calc = float(defaults["progression"]) 
         mean_lr = travel_mm / stroke_mm
         st.metric("Mean Leverage Ratio", f"{mean_lr:.2f}")
 
@@ -313,27 +302,41 @@ if spring_type_sel == "Auto-Recommend":
     st.caption(rec_reason)
 
 # ==========================================================
-# 8. CALCULATIONS
+# 8. SAG TARGET & CALCULATIONS
 # ==========================================================
-# Physics Engine
+st.header("4. Setup Preferences")
+
+# 1. Calculate Smart Default based on inputs
+cat_sag_map = {"Downcountry": 28, "Trail": 30, "All-Mountain": 31, "Enduro": 33, 
+               "Long Travel Enduro": 34, "Enduro (Race focus)": 32, "Downhill (DH)": 35}
+base_sag = cat_sag_map[category]
+skill_mod = SKILL_MODIFIERS[skill]["sag_mod"]
+smart_default_sag = base_sag + skill_mod
+
+# 2. User Input (Initialized with Smart Default)
+target_sag = st.slider(
+    "Target Sag (%)", 
+    min_value=20.0, 
+    max_value=40.0, 
+    value=float(smart_default_sag), 
+    step=0.5,
+    help="Default calculated from Bike Category + Rider Skill. Adjust preference here."
+)
+
+# ---------------- PHYSICS ENGINE ----------------
+# Mass
 coupling = COUPLING_COEFFS[category]
 eff_rider_kg = rider_kg + (gear_kg * coupling)
 system_kg = eff_rider_kg + bike_kg
 rear_load_kg = (system_kg * (final_bias_calc / 100)) - unsprung_kg
 rear_load_lbs = rear_load_kg * KG_TO_LB
 
-# Sag Target
-cat_sag_map = {"Downcountry": 28, "Trail": 30, "All-Mountain": 31, "Enduro": 33, 
-               "Long Travel Enduro": 34, "Enduro (Race focus)": 32, "Downhill (DH)": 35}
-target_sag = cat_sag_map[category] + SKILL_MODIFIERS[skill]["sag_mod"]
-
 # Spring Rate Formula
 sag_mm = stroke_mm * (target_sag / 100)
 raw_rate = (rear_load_lbs * mean_lr) / (sag_mm * MM_TO_IN)
 
-# Progression Correction (if Progressive spring selected/recommended)
+# Progression Correction
 if active_spring_type == "Progressive Coil":
-    # Progressive springs feel stiffer deeper in stroke, so we often size down ~3% to allow sag
     raw_rate = raw_rate * 0.97
 
 # ==========================================================
@@ -383,6 +386,31 @@ st.dataframe(
     use_container_width=True
 )
 
+# --- Preload Table ---
+st.subheader("Fine Tuning (Preload)")
+st.caption(f"Effect of preload on the **{center_rate} lbs** spring:")
+
+preload_data = []
+for turns in [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]:
+    preload_mm = turns * 1.0 
+    preload_in = preload_mm * MM_TO_IN
+    # Calculate effective load support with preload
+    sag_in_eff = (rear_load_lbs * mean_lr / center_rate) - preload_in
+    sag_pct_eff = (sag_in_eff / (stroke_mm * MM_TO_IN)) * 100
+    
+    status = "✅"
+    if turns >= 3.0: status = "⚠️ Excessive"
+    elif sag_pct_eff < 25: status = "⚠️ Too Stiff"
+    
+    preload_data.append({
+        "Turns": turns,
+        "Sag (%)": f"{sag_pct_eff:.1f}%",
+        "Sag (mm)": f"{(sag_pct_eff/100)*stroke_mm:.1f} mm",
+        "Status": status
+    })
+
+st.dataframe(pd.DataFrame(preload_data), hide_index=True)
+
 # --- Sprindex Logic ---
 if active_spring_type == "Sprindex":
     st.subheader("Sprindex Recommendation")
@@ -402,3 +430,12 @@ if active_spring_type == "Sprindex":
             st.success(f"Recommended Sprindex Range: **{valid_ranges[0]} lbs/in**")
         else:
             st.error("Calculated rate is outside standard Sprindex ranges.")
+    else:
+        st.error(f"Shock stroke ({stroke_mm}mm) exceeds Sprindex maximums.")
+
+st.info("""
+**Disclaimers:**
+* **Rate Tolerance:** Standard coils vary +/- 5%.
+* **Stroke Compatibility:** Ensure spring stroke > shock stroke to avoid coil bind.
+* **Diameter:** Check spring ID compatibility with your specific shock body.
+""")
