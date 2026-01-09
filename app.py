@@ -14,52 +14,59 @@ MM_TO_IN = 1/25.4
 STONE_TO_KG = 6.35029
 
 # --- Data Tables ---
+# UPDATED: lr_start values adjusted to match mean leverage ratios (Travel/Stroke)
 CATEGORY_DATA = {
     "Downcountry": {
         "travel": 115, "stroke": 45.0, "bias": 60, "base_sag": 28,
-        "progression": 12, "lr_start": 3.19,
+        "progression": 12, 
+        "lr_start": 2.75,  # Adjusted down from 3.19 to match mean ~2.56
         "desc": "110–120 mm",
         "bike_mass_def_kg": 12.0
     },
     "Trail": {
         "travel": 130, "stroke": 50.0, "bias": 63, "base_sag": 30,
-        "progression": 15, "lr_start": 2.92,
+        "progression": 15, 
+        "lr_start": 2.80,  # Adjusted down from 2.92 to match mean ~2.60
         "desc": "120–140 mm",
         "bike_mass_def_kg": 13.5
     },
     "All-Mountain": {
         "travel": 145, "stroke": 55.0, "bias": 65, "base_sag": 31,
-        "progression": 18, "lr_start": 3.00,
+        "progression": 18, 
+        "lr_start": 2.90,  # Adjusted down from 3.00 to match mean ~2.64
         "desc": "140–150 mm",
         "bike_mass_def_kg": 14.5
     },
     "Enduro": {
         "travel": 160, "stroke": 60.0, "bias": 68, "base_sag": 33,
-        "progression": 22, "lr_start": 3.00,
+        "progression": 22, 
+        "lr_start": 3.00,  # Accurate (Mean ~2.67)
         "desc": "150–170 mm",
         "bike_mass_def_kg": 15.5
     },
     "Long Travel Enduro": {
         "travel": 175, "stroke": 65.0, "bias": 70, "base_sag": 34,
-        "progression": 25, "lr_start": 3.00,
+        "progression": 25, 
+        "lr_start": 3.05,  # Adjusted slightly to align with ~2.69 mean
         "desc": "170–180 mm",
         "bike_mass_def_kg": 16.5
     },
     "Enduro (Race focus)": {
         "travel": 165, "stroke": 62.5, "bias": 65, "base_sag": 32,
-        "progression": 26, "lr_start": 3.13,
+        "progression": 26, 
+        "lr_start": 3.13, 
         "desc": "160–170 mm",
         "bike_mass_def_kg": 15.8
     },
     "Downhill (DH)": {
         "travel": 200, "stroke": 75.0, "bias": 75, "base_sag": 35,
-        "progression": 30, "lr_start": 3.14,
+        "progression": 30, 
+        "lr_start": 3.14, 
         "desc": "180–210 mm",
         "bike_mass_def_kg": 17.5
     }
 }
 
-# Skill modifiers only affect the text advice for Rear Bias
 SKILL_MODIFIERS = {
     "Just starting": {"bias": +4},
     "Beginner":      {"bias": +2},
@@ -175,7 +182,6 @@ with col_r2:
 st.header("2. Chassis Data")
 
 cat_options = list(CATEGORY_DATA.keys())
-# Description simplified to Name + Range
 cat_labels = [f"{k} ({CATEGORY_DATA[k]['desc']})" for k in cat_options]
 
 selected_idx = st.selectbox(
@@ -229,7 +235,6 @@ with col_c2:
             st.session_state.rear_bias_slider = cat_def_bias
             st.rerun()
 
-    # Slider initialization
     if 'rear_bias_slider' not in st.session_state:
         st.session_state.rear_bias_slider = cat_def_bias
         
@@ -244,7 +249,6 @@ with col_c2:
     
     st.caption(f"Category Default: **{cat_def_bias}%**")
     
-    # Skill advice logic
     if skill_suggestion != 0:
         advice_sign = "+" if skill_suggestion > 0 else ""
         st.info(f"💡 Because you selected **{skill}**, consider applying **{advice_sign}{skill_suggestion}%** bias.")
@@ -295,6 +299,11 @@ with col_k1:
 travel_mm = travel_in * IN_TO_MM if unit_len != "Millimetres (mm)" else travel_in
 stroke_mm = stroke_in * IN_TO_MM if unit_len != "Millimetres (mm)" else stroke_in
 
+# Calc variables
+calc_lr_start = 0.0
+calc_lr_end = 0.0
+use_advanced_calc = False
+
 with col_k2:
     adv_kinematics = st.checkbox("Advanced Kinematics")
     
@@ -302,6 +311,7 @@ with col_k2:
     def_prog = float(defaults["progression"])
     
     if adv_kinematics:
+        use_advanced_calc = True
         st.caption(f"Defaults for {category}")
         k_input_mode = st.radio("Input Mode", ["Start & Progression %", "Start & End Rates"], horizontal=True)
         lr_start = st.number_input("LR Start Rate", 1.5, 4.0, def_lr_start, 0.05)
@@ -316,7 +326,8 @@ with col_k2:
             prog_pct = ((lr_start - lr_end) / lr_start) * 100
             st.caption(f"Calculated Progression: {prog_pct:.1f}%")
 
-        mean_lr = (lr_start + lr_end) / 2
+        calc_lr_start = lr_start
+        calc_lr_end = lr_end
         
     else:
         prog_pct = def_prog
@@ -344,7 +355,6 @@ if spring_type_sel == "Auto-Recommend":
 # ==========================================================
 st.header("4. Setup Preferences")
 
-# Default Sag is purely Category-based
 smart_default_sag = defaults["base_sag"]
 
 target_sag = st.slider(
@@ -356,14 +366,23 @@ target_sag = st.slider(
 )
 
 # ---------------- PHYSICS ENGINE ----------------
+# 1. Kinematics Logic
+if use_advanced_calc:
+    total_drop = calc_lr_start - calc_lr_end
+    effective_lr = calc_lr_start - (total_drop * (target_sag / 100))
+else:
+    effective_lr = travel_mm / stroke_mm
+
+# 2. Mass Logic
 coupling = COUPLING_COEFFS[category]
 eff_rider_kg = rider_kg + (gear_kg * coupling)
 system_kg = eff_rider_kg + bike_kg
 rear_load_kg = (system_kg * (final_bias_calc / 100)) - unsprung_kg
 rear_load_lbs = rear_load_kg * KG_TO_LB
 
+# 3. Rate Calculation
 sag_mm = stroke_mm * (target_sag / 100)
-raw_rate = (rear_load_lbs * mean_lr) / (sag_mm * MM_TO_IN)
+raw_rate = (rear_load_lbs * effective_lr) / (sag_mm * MM_TO_IN)
 
 if active_spring_type == "Progressive Coil":
     raw_rate = raw_rate * 0.97
@@ -376,7 +395,6 @@ st.header("Results")
 
 res_c1, res_c2 = st.columns(2)
 res_c1.metric("Ideal Spring Rate", f"{int(raw_rate)} lbs/in", help="Exact calculated rate for target sag")
-# Clean display without delta arrows
 res_c2.metric("Target Sag", f"{target_sag:.1f}% ({sag_mm:.1f} mm)")
 
 st.subheader("Available Spring Options")
@@ -390,7 +408,7 @@ rates_to_check = [center_rate - base_step, center_rate, center_rate + base_step]
 for rate in rates_to_check:
     if rate <= 0: continue
     
-    resulting_sag_mm = (rear_load_lbs * mean_lr) / (rate * MM_TO_IN) 
+    resulting_sag_mm = (rear_load_lbs * effective_lr) / (rate * MM_TO_IN) 
     resulting_sag_pct = (resulting_sag_mm / stroke_mm) * 100
     
     tag = ""
@@ -420,7 +438,7 @@ preload_data = []
 for turns in [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]:
     preload_mm = turns * 1.0 
     preload_in = preload_mm * MM_TO_IN
-    sag_in_eff = (rear_load_lbs * mean_lr / center_rate) - preload_in
+    sag_in_eff = (rear_load_lbs * effective_lr / center_rate) - preload_in
     sag_pct_eff = (sag_in_eff / (stroke_mm * MM_TO_IN)) * 100
     
     status = "✅"
