@@ -18,43 +18,43 @@ CATEGORY_DATA = {
     "Downcountry": {
         "travel": 115, "stroke": 45.0, "bias": 60, 
         "progression": 12, "lr_start": 3.19, "lr_end": 2.81,
-        "desc": "110–120mm | Efficient climbing",
+        "desc": "110–120mm",
         "bike_mass_def_kg": 12.0
     },
     "Trail": {
         "travel": 130, "stroke": 50.0, "bias": 63, 
         "progression": 15, "lr_start": 2.92, "lr_end": 2.48,
-        "desc": "120–140mm | Versatile all-rounder",
+        "desc": "120–140mm",
         "bike_mass_def_kg": 13.5
     },
     "All-Mountain": {
         "travel": 145, "stroke": 55.0, "bias": 65, 
         "progression": 18, "lr_start": 3.00, "lr_end": 2.46,
-        "desc": "140–150mm | Tech backcountry",
+        "desc": "140–150mm",
         "bike_mass_def_kg": 14.5
     },
     "Enduro": {
         "travel": 160, "stroke": 60.0, "bias": 68, 
         "progression": 22, "lr_start": 3.00, "lr_end": 2.34,
-        "desc": "150–170mm | Aggressive descending",
+        "desc": "150–170mm",
         "bike_mass_def_kg": 15.5
     },
     "Long Travel Enduro": {
         "travel": 175, "stroke": 65.0, "bias": 70, 
         "progression": 25, "lr_start": 3.00, "lr_end": 2.25,
-        "desc": "170–180mm | Near-DH capability",
+        "desc": "170–180mm",
         "bike_mass_def_kg": 16.5
     },
     "Enduro (Race focus)": {
         "travel": 165, "stroke": 62.5, "bias": 65, 
         "progression": 26, "lr_start": 3.13, "lr_end": 2.32,
-        "desc": "160–170mm | Speed/tracking focus",
+        "desc": "160–170mm",
         "bike_mass_def_kg": 15.8
     },
     "Downhill (DH)": {
         "travel": 200, "stroke": 75.0, "bias": 75, 
         "progression": 30, "lr_start": 3.14, "lr_end": 2.20,
-        "desc": "180–210mm | Gravity focus",
+        "desc": "180–210mm",
         "bike_mass_def_kg": 17.5
     }
 }
