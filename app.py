@@ -98,12 +98,24 @@ def estimate_unsprung(wheel_tier, frame_mat, has_inserts):
     return base + wheels + swingarm + inserts
 
 def recommend_spring_type(progression_pct, has_hbo):
-    if has_hbo:
-        return "Standard Steel (Linear)", "Shock has HBO (Hydraulic Bottom Out). Linear spring is optimal."
-    if progression_pct < 15:
-        return "Progressive Coil", f"Frame is linear ({progression_pct:.1f}% progression). Progressive spring recommended to prevent bottom-out."
+    """
+    Revised Matrix Logic:
+    1. High (>15%): Linear. Progressive causes "Wall Effect".
+    2. Moderate (10-15%): Conditional. Linear if HBO exists, otherwise Progressive.
+    3. Linear (<10%): Progressive. Frame causes "Hammock Effect"; spring must compensate.
+    """
+    if progression_pct > 15:
+        return "Standard Steel (Linear)", f"Frame is Highly Progressive ({progression_pct:.1f}%). A Progressive spring would cause a harsh 'Wall Effect' at bottom-out. Stick to Linear."
+    
+    elif 10 <= progression_pct <= 15:
+        if has_hbo:
+            return "Standard Steel (Linear)", f"Frame is Moderately Progressive ({progression_pct:.1f}%). Your shock's HBO will handle the bottom-out, keeping the mid-stroke consistent. Linear is optimal."
+        else:
+            return "Progressive Coil", f"Frame is Moderately Progressive ({progression_pct:.1f}%) but lacks HBO. A Progressive spring is recommended to prevent bottom-out without over-springing."
+            
     else:
-        return "Standard Steel (Linear)", f"Frame is progressive ({progression_pct:.1f}%). Linear spring will work well."
+        # Linear or Regressive (< 10%)
+        return "Progressive Coil", f"Frame is Linear/Regressive ({progression_pct:.1f}%). Without a Progressive spring, you risk the 'Hammock Effect' and harsh bottom-outs."
 
 # ==========================================================
 # 3. SESSION STATE & CALLBACKS
@@ -112,6 +124,7 @@ if 'last_category' not in st.session_state:
     st.session_state.last_category = None
 
 def reset_chassis():
+    # Deleting session keys forces widgets to reload default values
     for key in ['bike_weight_man', 'rear_bias_slider']:
         if key in st.session_state:
             del st.session_state[key]
@@ -126,6 +139,7 @@ st.title("Pro MTB Spring Rate Calculator")
 with st.expander("⚙️ Settings & Units", expanded=True):
     col_u1, col_u2 = st.columns(2)
     with col_u1:
+        # Global (kg) is first (Default)
         unit_mass = st.radio("Mass Units", ["Global (kg)", "North America (lbs)", "UK Hybrid (st & kg)"])
     with col_u2:
         unit_len = st.radio("Length Units", ["Millimetres (mm)", "Inches (\")"])
@@ -137,7 +151,7 @@ st.header("1. Rider Profile")
 col_r1, col_r2 = st.columns(2)
 
 with col_r1:
-    # Skill currently visual-only for this iteration
+    # Visual selector only, no math impact
     skill = st.selectbox("Rider Skill", SKILL_LEVELS, index=2)
     
 with col_r2:
@@ -198,6 +212,7 @@ with col_c1:
         is_lbs = unit_mass == "North America (lbs)"
         lbl = "Bike Weight (lbs)" if is_lbs else "Bike Weight (kg)"
         
+        # Dynamic Manual Default based on Category
         def_w_kg = defaults.get("bike_mass_def_kg", 14.5)
         def_w_val = def_w_kg * KG_TO_LB if is_lbs else def_w_kg
         min_w, max_w = (15.0, 66.0) if is_lbs else (7.0, 30.0)
@@ -205,7 +220,7 @@ with col_c1:
         w_in = st.number_input(lbl, min_w, max_w, float(def_w_val), 0.1, key="bike_weight_man")
         bike_kg = w_in * LB_TO_KG if is_lbs else w_in
 
-# --- Rear Bias (Modified) ---
+# --- Rear Bias (Pure Slider) ---
 with col_c2:
     cat_def_bias = int(defaults["bias"])
     
@@ -286,12 +301,13 @@ with col_k2:
         lr_start = st.number_input("LR Start Rate", 1.5, 4.0, def_lr_start, 0.05)
         
         if k_input_mode == "Start & Progression %":
-            prog_pct = st.number_input("Progression (%)", 0.0, 60.0, def_prog, 1.0)
+            prog_pct = st.number_input("Progression (%)", -10.0, 60.0, def_prog, 1.0)
             lr_end = lr_start * (1 - (prog_pct/100))
             st.caption(f"Derived End Rate: {lr_end:.2f}")
         else:
             def_end = lr_start * (1 - (def_prog/100))
             lr_end = st.number_input("LR End Rate", 1.5, 4.0, def_end, 0.05)
+            # Progression Calc
             prog_pct = ((lr_start - lr_end) / lr_start) * 100
             st.caption(f"Calculated Progression: {prog_pct:.1f}%")
 
@@ -311,7 +327,11 @@ active_spring_type = spring_type_sel
 if spring_type_sel == "Auto-Recommend":
     rec_type, rec_reason = recommend_spring_type(prog_pct, has_hbo)
     active_spring_type = rec_type
-    st.success(f"💡 Recommended: **{rec_type}**")
+    
+    if "Linear" in rec_type:
+        st.success(f"💡 Recommended: **{rec_type}**")
+    else:
+        st.warning(f"💡 Recommended: **{rec_type}**")
     st.caption(rec_reason)
 
 # ==========================================================
@@ -319,7 +339,7 @@ if spring_type_sel == "Auto-Recommend":
 # ==========================================================
 st.header("4. Setup Preferences")
 
-# Default Sag is now purely Category-based (no skill modifier)
+# Default Sag is purely Category-based (Skill removed)
 smart_default_sag = defaults["base_sag"]
 
 target_sag = st.slider(
