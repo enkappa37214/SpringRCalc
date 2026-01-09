@@ -59,6 +59,9 @@ CATEGORY_DATA = {
     }
 }
 
+# Define options list globally so it is accessible to callbacks
+CAT_OPTIONS = list(CATEGORY_DATA.keys())
+
 SKILL_MODIFIERS = {
     "Just starting": {"bias": +4, "sag_mod": 1.5},
     "Beginner":      {"bias": +2, "sag_mod": 1.0},
@@ -109,16 +112,15 @@ def recommend_spring_type(progression_pct):
 # ==========================================================
 # 3. SESSION STATE & CALLBACKS
 # ==========================================================
-# Initialize state variables if they don't exist
 if 'last_category' not in st.session_state:
     st.session_state.last_category = None
 if 'rear_bias_slider' not in st.session_state:
-    st.session_state.rear_bias_slider = 65 # Safe default
+    st.session_state.rear_bias_slider = 65 
 
 # Callback: Update Bias when Category changes
 def update_bias_from_category():
+    # .category_select now returns the String Key (e.g., "Downcountry")
     cat = st.session_state.category_select
-    # Only update if category actually changed
     if cat != st.session_state.last_category:
         defaults = CATEGORY_DATA[cat]
         st.session_state.rear_bias_slider = int(defaults["bias"])
@@ -126,11 +128,9 @@ def update_bias_from_category():
 
 # Callback: Reset Button
 def reset_chassis():
-    # Deleting these keys forces Streamlit widgets to reload with their default parameters
     for key in ['bike_weight_man', 'rear_bias_slider']:
         if key in st.session_state:
             del st.session_state[key]
-    # Re-trigger bias update logic for current category selection
     st.session_state.last_category = None 
 
 # ==========================================================
@@ -175,18 +175,14 @@ with col_r2:
 # ==========================================================
 st.header("2. Chassis Data")
 
-# Category Selection
-cat_options = list(CATEGORY_DATA.keys())
-cat_labels = [f"{k} ({CATEGORY_DATA[k]['desc']})" for k in cat_options]
-
-selected_idx = st.selectbox(
+# FIX: Passed CAT_OPTIONS directly and formatted the string for display.
+category = st.selectbox(
     "Category", 
-    range(len(cat_options)), 
-    format_func=lambda x: cat_labels[x],
+    options=CAT_OPTIONS, 
+    format_func=lambda x: f"{x} ({CATEGORY_DATA[x]['desc']})",
     key='category_select',
     on_change=update_bias_from_category
 )
-category = cat_options[selected_idx]
 defaults = CATEGORY_DATA[category]
 
 st.button("Reset Chassis to Category Defaults", on_click=reset_chassis)
