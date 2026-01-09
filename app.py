@@ -1,103 +1,218 @@
 import streamlit as st
-import pandas as pd
 
-# ==========================================================
-# 1. CONFIGURATION & DATA CONSTANTS
-# ==========================================================
-st.set_page_config(page_title="Pro MTB Spring Rate Calculator", page_icon="⚙️", layout="centered")
-
-# --- Constants ---
-LB_TO_KG = 0.453592
-KG_TO_LB = 2.20462
-IN_TO_MM = 25.4
-MM_TO_IN = 1/25.4
-STONE_TO_KG = 6.35029
-
-# --- Data Tables ---
-CATEGORY_DATA = {
-    "Downcountry": {"travel": 115, "stroke": 45.0, "bias": 60, "base_sag": 28, "progression": 12, "lr_start": 2.75, "desc": "110–120 mm", "bike_mass_def_kg": 12.0},
-    "Trail": {"travel": 130, "stroke": 50.0, "bias": 63, "base_sag": 30, "progression": 15, "lr_start": 2.80, "desc": "120–140 mm", "bike_mass_def_kg": 13.5},
-    "All-Mountain": {"travel": 145, "stroke": 55.0, "bias": 65, "base_sag": 31, "progression": 18, "lr_start": 2.90, "desc": "140–150 mm", "bike_mass_def_kg": 14.5},
-    "Enduro": {"travel": 160, "stroke": 60.0, "bias": 68, "base_sag": 33, "progression": 22, "lr_start": 3.00, "desc": "150–170 mm", "bike_mass_def_kg": 15.5},
-    "Long Travel Enduro": {"travel": 175, "stroke": 65.0, "bias": 70, "base_sag": 34, "progression": 25, "lr_start": 3.05, "desc": "170–180 mm", "bike_mass_def_kg": 16.5},
-    "Enduro (Race focus)": {"travel": 165, "stroke": 62.5, "bias": 65, "base_sag": 32, "progression": 26, "lr_start": 3.13, "desc": "160–170 mm", "bike_mass_def_kg": 15.8},
-    "Downhill (DH)": {"travel": 200, "stroke": 75.0, "bias": 75, "base_sag": 35, "progression": 30, "lr_start": 3.14, "desc": "180–210 mm", "bike_mass_def_kg": 17.5}
-}
+# =========================================================
+# CONSTANTS & DEFAULTS
+# =========================================================
 
 SKILL_MODIFIERS = {
-    "Just starting": {"bias": +4},
-    "Beginner": {"bias": +2},
-    "Intermediate": {"bias": 0},
-    "Advanced": {"bias": -1},
-    "Racer": {"bias": -2}
-}
-SKILL_LEVELS = list(SKILL_MODIFIERS.keys())
-
-COUPLING_COEFFS = {
-    "Downcountry": 0.80, "Trail": 0.75, "All-Mountain": 0.70,
-    "Enduro": 0.72, "Long Travel Enduro": 0.90,
-    "Enduro (Race focus)": 0.78, "Downhill (DH)": 0.95
+    "Just starting": {"bias": 0.04},
+    "Beginner": {"bias": 0.02},
+    "Intermediate": {"bias": 0.00},
+    "Advanced": {"bias": -0.01},
+    "Racer": {"bias": -0.02},
 }
 
-BIKE_WEIGHT_EST = {
-    "Downcountry": {"Carbon": [12.2, 11.4, 10.4], "Aluminium": [13.8, 13.1, 12.5]},
-    "Trail": {"Carbon": [14.1, 13.4, 12.8], "Aluminium": [15.4, 14.7, 14.0]},
-    "All-Mountain": {"Carbon": [15.0, 14.2, 13.5], "Aluminium": [16.2, 15.5, 14.8]},
-    "Enduro": {"Carbon": [16.2, 15.5, 14.8], "Aluminium": [17.5, 16.6, 15.8]},
-    "Long Travel Enduro": {"Carbon": [16.8, 16.0, 15.2], "Aluminium": [18.0, 17.2, 16.5]},
-    "Enduro (Race focus)": {"Carbon": [16.0, 15.2, 14.5], "Aluminium": [17.2, 16.3, 15.5]},
-    "Downhill (DH)": {"Carbon": [17.8, 17.0, 16.2], "Aluminium": [19.5, 18.5, 17.5]}
+CATEGORY_DEFAULTS = {
+    "Downcountry": {"travel": 120, "stroke": 45, "bias": 0.60, "bike_mass": 13.5},
+    "Trail": {"travel": 140, "stroke": 50, "bias": 0.63, "bike_mass": 14.5},
+    "All-Mountain": {"travel": 150, "stroke": 55, "bias": 0.65, "bike_mass": 15.5},
+    "Enduro": {"travel": 165, "stroke": 60, "bias": 0.68, "bike_mass": 16.5},
+    "Long Travel Enduro": {"travel": 180, "stroke": 65, "bias": 0.70, "bike_mass": 17.5},
+    "Enduro (Race focus)": {"travel": 165, "stroke": 60, "bias": 0.65, "bike_mass": 16.0},
+    "Downhill (DH)": {"travel": 200, "stroke": 75, "bias": 0.75, "bike_mass": 18.5},
 }
 
-SIZE_WEIGHT_MODS = {"XS": -0.5, "S": -0.25, "M": 0.0, "L": 0.3, "XL": 0.6, "XXL": 0.95}
+AVAILABLE_STROKES_MM = [45, 50, 55, 60, 62.5, 65, 70, 75]
 
-COMMON_STROKES = [37.5, 40.0, 42.5, 45.0, 47.5, 50.0, 52.5, 55.0, 57.5, 60.0, 62.5, 65.0, 70.0, 72.5, 75.0]
+# =========================================================
+# PHYSICS FUNCTIONS
+# =========================================================
 
-# ==========================================================
-# 6. UI - CHASSIS (ONLY FIX HERE)
-# ==========================================================
-st.header("2. Chassis Data")
+def compute_mean_leverage_ratio(lr_start, lr_end=None, progression_pct=None):
+    if lr_end is not None:
+        return (lr_start + lr_end) / 2
+    if progression_pct is not None:
+        lr_end = lr_start * (1 - progression_pct / 100)
+        return (lr_start + lr_end) / 2
+    return lr_start
 
-cat_options = list(CATEGORY_DATA.keys())
-cat_labels = [f"{k} ({CATEGORY_DATA[k]['desc']})" for k in cat_options]
 
-selected_idx = st.selectbox(
-    "Category",
-    range(len(cat_options)),
-    format_func=lambda x: cat_labels[x],
-    key='category_select'
+def compute_rear_sprung_weight_lbs(
+    rider_mass_kg,
+    gear_mass_kg,
+    coupling,
+    bike_mass_kg,
+    rear_bias,
+    unsprung_mass_kg,
+):
+    effective_rider_mass = rider_mass_kg + (gear_mass_kg * coupling)
+    total_mass = effective_rider_mass + bike_mass_kg
+    rear_sprung_mass = (total_mass * rear_bias) - unsprung_mass_kg
+    return rear_sprung_mass * 2.20462
+
+
+def compute_spring_rate(
+    rear_weight_lbs,
+    mean_lr,
+    stroke_mm,
+    sag_percent,
+):
+    stroke_in = stroke_mm / 25.4
+    sag_in = stroke_in * (sag_percent / 100)
+    return (rear_weight_lbs * mean_lr) / sag_in
+
+
+# =========================================================
+# STREAMLIT UI
+# =========================================================
+
+st.title("MTB Coil Spring Rate Calculator")
+
+# ---------------- Rider ----------------
+
+st.header("Rider")
+
+skill = st.selectbox(
+    "Rider Skill",
+    ["Just starting", "Beginner", "Intermediate", "Advanced", "Racer"],
 )
-category = cat_options[selected_idx]
-defaults = CATEGORY_DATA[category]
 
-col_c1, col_c2 = st.columns(2)
+skill_suggestion = SKILL_MODIFIERS[skill]["bias"]
 
-# --- Rear Bias ---
-with col_c2:
-    cat_def_bias = int(defaults["bias"])
-    skill_suggestion = SKILL_MODIFIERS[skill]["bias"]
+rider_mass = st.number_input(
+    "Rider Body Weight (kg)",
+    min_value=40.0,
+    max_value=130.0,
+    value=75.0,
+    step=0.5,
+)
 
-    if 'rear_bias_slider' not in st.session_state:
-        st.session_state.rear_bias_slider = cat_def_bias
+gear_mass = st.number_input(
+    "Gear Weight (kg)",
+    min_value=0.0,
+    max_value=10.0,
+    value=4.0,
+    step=0.5,
+)
 
-    rear_bias_in = st.slider(
-        "Base Bias (%)",
-        55, 85,
-        key="rear_bias_slider",
-        label_visibility="collapsed"
+coupling = st.slider(
+    "Gear Coupling Coefficient",
+    min_value=0.6,
+    max_value=1.0,
+    value=0.75,
+    step=0.01,
+)
+
+# ---------------- Bike ----------------
+
+st.header("Bike")
+
+category = st.selectbox("Bike Category", list(CATEGORY_DEFAULTS.keys()))
+defaults = CATEGORY_DEFAULTS[category]
+
+bike_mass = st.number_input(
+    "Bike Weight (kg)",
+    min_value=10.0,
+    max_value=25.0,
+    value=float(defaults["bike_mass"]),
+    step=0.5,
+)
+
+rear_bias = st.slider(
+    "Suggested Bias (%)",
+    min_value=55,
+    max_value=75,
+    value=int((defaults["bias"] + skill_suggestion) * 100),
+    step=1,
+) / 100.0
+
+unsprung_mass = st.number_input(
+    "Unsprung Mass (kg)",
+    min_value=0.5,
+    max_value=5.0,
+    value=2.5,
+    step=0.1,
+)
+
+# ---------------- Suspension ----------------
+
+st.header("Suspension")
+
+travel = st.number_input(
+    "Rear Wheel Travel (mm)",
+    min_value=100,
+    max_value=220,
+    value=int(defaults["travel"]),
+    step=5,
+)
+
+stroke = st.selectbox(
+    "Shock Stroke (mm)",
+    AVAILABLE_STROKES_MM,
+    index=AVAILABLE_STROKES_MM.index(defaults["stroke"]),
+)
+
+advanced_kin = st.checkbox("Advanced Kinematics")
+
+if advanced_kin:
+    lr_start = st.number_input(
+        "Leverage Ratio Start",
+        min_value=1.5,
+        max_value=4.0,
+        value=2.6,
+        step=0.05,
     )
+    lr_end = st.number_input(
+        "Leverage Ratio End",
+        min_value=1.5,
+        max_value=4.0,
+        value=2.3,
+        step=0.05,
+    )
+    mean_lr = compute_mean_leverage_ratio(lr_start, lr_end=lr_end)
+else:
+    mean_lr = travel / stroke
 
-    final_bias_calc = rear_bias_in
+sag_percent = st.slider(
+    "Target Sag (%)",
+    min_value=25,
+    max_value=37,
+    value=33,
+    step=1,
+)
 
-    st.caption(f"Category Default: **{cat_def_bias}%**")
+spring_type = st.selectbox(
+    "Spring Type",
+    ["Default Category (Linear)", "Sprindex", "Progressive"],
+)
 
-    if skill_suggestion != 0:
-        advice_sign = "+" if skill_suggestion > 0 else ""
-        st.info(f"💡 Because you selected **{skill}**, consider applying **{advice_sign}{skill_suggestion}%** bias.")
+# ---------------- Calculation ----------------
 
-    # ✅ FIXED LABEL
-    st.markdown(f"**Suggested Bias:** :blue-background[{final_bias_calc}%]")
+rear_weight_lbs = compute_rear_sprung_weight_lbs(
+    rider_mass,
+    gear_mass,
+    coupling,
+    bike_mass,
+    rear_bias,
+    unsprung_mass,
+)
 
-# ==========================================================
-# (Everything else remains unchanged)
-# ==========================================================
+raw_rate = compute_spring_rate(
+    rear_weight_lbs,
+    mean_lr,
+    stroke,
+    sag_percent,
+)
+
+recommended_rate = round(raw_rate / 25) * 25
+
+# ---------------- Results ----------------
+
+st.header("Results")
+
+st.metric("Raw Calculated Spring Rate (lbs/in)", f"{raw_rate:.1f}")
+st.metric("Recommended Spring Rate (lbs/in)", f"{recommended_rate}")
+
+st.caption(
+    "Note: Rounded to nearest 25 lbs. Verify spring stroke and inner diameter compatibility."
+)
